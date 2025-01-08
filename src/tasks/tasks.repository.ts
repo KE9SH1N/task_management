@@ -1,16 +1,24 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { Task } from './task.entity';
 import { TaskStatus } from './task-status.enum';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { GetTasksFilterDto } from './dto/get-tasks-filter.dto';
 import { User } from 'src/auth/user.entity';
+import { Logger } from '@nestjs/common';
+import { filter } from 'rxjs';
 
 @Injectable()
 export class TasksRepository extends Repository<Task> {
   constructor(private readonly dataSource: DataSource) {
     super(Task, dataSource.createEntityManager());
   }
+
+  private logger = new Logger('TasksRepository');
 
   async getTasks(filterDto: GetTasksFilterDto, user: User): Promise<Task[]> {
     const { status, search } = filterDto;
@@ -19,7 +27,7 @@ export class TasksRepository extends Repository<Task> {
     query.where({ user });
 
     if (status) {
-      query.andWhere('task.status = :status', { status });
+      query.andWhere('task.statusasdf = :status', { status });
     }
     if (search) {
       query.andWhere(
@@ -27,8 +35,15 @@ export class TasksRepository extends Repository<Task> {
         { search: `%${search}%` },
       );
     }
-    const tasks = await query.getMany();
-    return tasks;
+    try {
+      const tasks = await query.getMany();
+      return tasks;
+    } catch {
+      this.logger.error(
+        `Failed to get tasks for user "${user.username}". Filters:${JSON.stringify(filterDto)}`,
+      );
+      throw new InternalServerErrorException();
+    }
   }
 
   async getTaskById(id: string, user: User): Promise<Task> {
